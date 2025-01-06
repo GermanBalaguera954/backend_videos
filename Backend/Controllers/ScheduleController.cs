@@ -21,7 +21,7 @@ namespace Backend.Controllers
             return Ok(schedules);
         }
 
-        // GET: api/schedules/5
+        // GET: api/schedule/{id}
         [HttpGet("{id}")]
         public async Task<ActionResult<Schedule>> GetSchedule(int id)
         {
@@ -35,18 +35,24 @@ namespace Backend.Controllers
             return Ok(schedule);
         }
 
-        // POST: api/schedules
+        // POST: api/schedule
         [HttpPost]
         public async Task<ActionResult<Schedule>> PostSchedule(Schedule schedule)
         {
-            // Verificar que el contenido existe en la base de datos
+            // Verifica que el contenido existe en la base de datos
             var content = await _context.Contents.FindAsync(schedule.ContentId);
             if (content == null)
             {
                 return BadRequest(new { mensaje = "El contenido especificado no existe." });
             }
 
-            // Verificar si ya existe una programación para el mismo horario
+            // Valida si el contenido es un banner y si la duración está configurada
+            if ((content.ContentType == "BT" || content.ContentType == "VBL") && schedule.DurationInSeconds <= 0)
+            {
+                return BadRequest(new { mensaje = "La duración del banner debe ser mayor a cero segundos." });
+            }
+
+            // Verifica si ya existe una programación para el mismo horario
             var overlappingSchedule = await _context.Schedules
                 .Where(s => s.ScheduledAt == schedule.ScheduledAt && s.ContentId == schedule.ContentId)
                 .FirstOrDefaultAsync();
@@ -56,10 +62,10 @@ namespace Backend.Controllers
                 return BadRequest(new { mensaje = "Ya existe una programación para este contenido en el mismo horario." });
             }
 
-            // Asignar un usuario por defecto (si es necesario)
+            // Asignar un usuario por defecto
             if (schedule.UserId == 0)
             {
-                schedule.UserId = 1;  // Supongamos que 1 es el ID del administrador por defecto
+                schedule.UserId = 1;
             }
 
             _context.Schedules.Add(schedule);
@@ -68,7 +74,7 @@ namespace Backend.Controllers
             return CreatedAtAction("GetSchedule", new { id = schedule.Id }, schedule);
         }
 
-        // PUT: api/schedules/5
+        // PUT: api/schedule/{id}
         [HttpPut("{id}")]
         public async Task<IActionResult> PutSchedule(int id, Schedule schedule)
         {
@@ -106,7 +112,7 @@ namespace Backend.Controllers
             return NoContent();
         }
 
-        // DELETE: api/schedules/5
+        // DELETE: api/schedule/{id}
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteSchedule(int id)
         {
@@ -120,6 +126,68 @@ namespace Backend.Controllers
             await _context.SaveChangesAsync();
 
             return NoContent();
+        }
+        // Endpoint para obtener el siguiente contenido programado
+        [HttpGet("next/{currentContentId}")]
+        public async Task<IActionResult> GetNextScheduledContent(int currentContentId)
+        {
+            var currentSchedule = await _context.Schedules
+                .Where(s => s.ContentId == currentContentId)
+                .OrderBy(s => s.ScheduledAt)
+                .FirstOrDefaultAsync();
+
+            if (currentSchedule == null)
+            {
+                return NotFound(new { mensaje = "Contenido no encontrado en la programación." });
+            }
+
+            // Buscar el siguiente contenido programado
+            var nextSchedule = await _context.Schedules
+                .Where(s => s.ScheduledAt > currentSchedule.ScheduledAt)
+                .OrderBy(s => s.ScheduledAt)
+                .FirstOrDefaultAsync();
+
+            if (nextSchedule == null)
+            {
+                return NotFound(new { mensaje = "No hay contenido programado para la siguiente reproducción." });
+            }
+
+            var nextContent = await _context.Contents.FindAsync(nextSchedule.ContentId);
+
+            if (nextContent == null)
+            {
+                return NotFound(new { mensaje = "Contenido no encontrado." });
+            }
+
+            // Si es un banner, se considera su duración en la programación
+            if (nextContent.ContentType == "BT" || nextContent.ContentType == "VBL")
+            {
+                var nextEndTime = nextSchedule.ScheduledAt.AddSeconds(nextSchedule.DurationInSeconds);
+                return Ok(new
+                {
+                    nextContent.Id,
+                    nextContent.Title,
+                    nextContent.ContentType,
+                    nextContent.VideoUrl,
+                    nextContent.BannerImageUrl,
+                    nextContent.BannerText,
+                    nextSchedule.ScheduledAt,
+                    nextEndTime,
+                    nextSchedule.DurationInSeconds
+                });
+            }
+
+            return Ok(new
+            {
+                nextContent.Id,
+                nextContent.Title,
+                nextContent.ContentType,
+                nextContent.VideoUrl,
+                nextContent.BannerImageUrl,
+                nextContent.BannerText,
+                nextSchedule.ScheduledAt,
+                nextSchedule.DurationInSeconds
+            });
         }
     }
 }

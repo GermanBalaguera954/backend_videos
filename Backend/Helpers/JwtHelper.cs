@@ -24,7 +24,7 @@ namespace Backend.Helpers
                 issuer: issuer,
                 audience: audience,
                 claims: claims,
-                expires: DateTime.Now.AddMinutes(30),
+                expires: DateTime.Now.AddHours(24),
                 signingCredentials: credentials
             );
 

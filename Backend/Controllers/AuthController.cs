@@ -17,7 +17,6 @@ namespace Backend.Controllers
         private readonly AppDbContext _context;
         private readonly PasswordHasher<User> _passwordHasher;
 
-        // Usamos constructor principal para simplificar la asignación
         public AuthController(IConfiguration configuration, AppDbContext context)
         {
             _configuration = configuration;
@@ -48,7 +47,7 @@ namespace Backend.Controllers
                 return Unauthorized(new { mensaje = "El usuario no tiene un rol asignado." });
             }
 
-            // Usar el helper para generar el token
+            // Se usa el helper para generar el token
             var token = JwtHelper.GenerateJwtToken(
                 _configuration["Jwt:Key"],
                 _configuration["Jwt:Issuer"],

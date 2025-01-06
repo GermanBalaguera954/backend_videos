@@ -13,13 +13,11 @@ namespace Backend.Controllers
         {
             _context = context;
         }
-
         [HttpGet]
         public async Task<IActionResult> TestConnection()
         {
             try
             {
-                // Intenta ejecutar una consulta simple
                 await _context.Database.CanConnectAsync();
                 return Ok("Conexión exitosa a la base de datos.");
             }

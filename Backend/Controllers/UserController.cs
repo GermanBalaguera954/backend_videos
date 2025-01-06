@@ -46,7 +46,7 @@ namespace Backend.Controllers
                 return BadRequest("El usuario no puede ser nulo.");
             }
 
-            // Encriptamos la contraseña antes de guardarla
+            // Se encripta la contraseña antes de guardarla
             user.Password = _passwordHasher.HashPassword(user, user.Password);
 
             _context.Users.Add(user);
@@ -70,7 +70,7 @@ namespace Backend.Controllers
                 return NotFound();
             }
 
-            // Si la contraseña es cambiada, la encriptamos y actualizamos el campo 'IsPasswordResetRequired'
+            // Si la contraseña es cambiada, se encripta y actualiza el campo 'IsPasswordResetRequired'
             if (!string.IsNullOrEmpty(user.Password))
             {
                 existingUser.Password = _passwordHasher.HashPassword(existingUser, user.Password);

@@ -27,12 +27,12 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidAudience = builder.Configuration["Jwt:Audience"],
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]))
         };
-        // Personalizar el manejo de eventos de error del token
+
+        // Comentarios para el manejo de eventos de error del token
         options.Events = new JwtBearerEvents
         {
             OnAuthenticationFailed = context =>
             {
-                // Si la autenticación del token falla
                 context.Response.StatusCode = 401;
                 context.Response.ContentType = "application/json";
                 var message = new { error = "Token inválido o expirado. Por favor, inicie sesión nuevamente." };
@@ -40,7 +40,6 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             },
             OnChallenge = context =>
             {
-                // Si el token no está presente
                 context.Response.StatusCode = 401;
                 context.Response.ContentType = "application/json";
                 var message = new { error = "El token no se proporcionó o es inválido. Por favor, proporcione un token válido." };
@@ -49,16 +48,35 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
+// Configuración de CORS
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAll", policy =>
+        policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
+});
+
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+// Configuración de seguridad de cabeceras
+app.Use(async (context, next) =>
+{
+    // Configurar cabeceras de seguridad HTTP
+    context.Response.Headers.Append("X-Content-Type-Options", "nosniff"); // Prevenir MIME sniffing
+    context.Response.Headers.Append("X-Frame-Options", "DENY"); // Evitar clickjacking
+    context.Response.Headers.Append("X-XSS-Protection", "1; mode=block"); // Protección básica contra XSS
 
+    await next.Invoke();
+});
+
+// Configurar la redirección de HTTP a HTTPS
+if (app.Environment.IsProduction())
+{
+    app.UseHsts();
+}
+
+app.UseCors("AllowAll");
 app.UseHttpsRedirection();
-
 app.UseAuthentication();
-
 app.UseAuthorization();
-
 app.MapControllers();
-
 app.Run();

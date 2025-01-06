@@ -6,14 +6,13 @@ using Microsoft.AspNetCore.Authorization;
 
 namespace Backend.Controllers
 {
-    [Authorize]
     [Route("api/[controller]")]
     [ApiController]
     public class ContentController(AppDbContext context) : ControllerBase
     {
         private readonly AppDbContext _context = context;
 
-        // GET: api/contents
+        // GET: api/content
         [HttpGet]
         public async Task<ActionResult<IEnumerable<Content>>> GetContents()
         {
@@ -21,7 +20,7 @@ namespace Backend.Controllers
             return Ok(contents);
         }
 
-        // GET: api/contents/5
+        // GET: api/content/{id}
         [HttpGet("{id}")]
         public async Task<ActionResult<Content>> GetContent(int id)
         {
@@ -35,7 +34,8 @@ namespace Backend.Controllers
             return Ok(content);
         }
 
-        // POST: api/contents
+        // POST: api/content
+        [Authorize]
         [HttpPost]
         public async Task<ActionResult<Content>> PostContent(Content content)
         {
@@ -58,7 +58,8 @@ namespace Backend.Controllers
             return CreatedAtAction("GetContent", new { id = content.Id }, content);
         }
 
-        // PUT: api/contents/5
+        // PUT: api/content/{id}
+        [Authorize]
         [HttpPut("{id}")]
         public async Task<IActionResult> PutContent(int id, Content content)
         {
@@ -73,13 +74,13 @@ namespace Backend.Controllers
                 return NotFound(new { mensaje = "Contenido no encontrado." });
             }
 
-            // Validar tipo de contenido (VT, VBL, BT)
+            // Se valida tipo de contenido (VT, VBL, BT)
             if (content.ContentType != "VT" && content.ContentType != "VBL" && content.ContentType != "BT")
             {
                 return BadRequest(new { mensaje = "El tipo de contenido debe ser 'VT', 'VBL' o 'BT'." });
             }
 
-            // Validar contenido de tipo 'VBL': debe incluir banner (imagen o texto)
+            // Se valida el contenido de tipo 'VBL'
             if (content.ContentType == "VBL" && (string.IsNullOrEmpty(content.BannerImageUrl) && string.IsNullOrEmpty(content.BannerText)))
             {
                 return BadRequest(new { mensaje = "El contenido de tipo 'VBL' debe incluir una imagen de banner o un texto de banner." });
@@ -99,7 +100,8 @@ namespace Backend.Controllers
             return NoContent();
         }
 
-        // DELETE: api/contents/5
+        // DELETE: api/content/{id}
+        [Authorize]
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteContent(int id)
         {
