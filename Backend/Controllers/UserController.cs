@@ -7,7 +7,6 @@ using Microsoft.AspNetCore.Authorization;
 
 namespace Backend.Controllers
 {
-    [Authorize]
     [Route("api/[controller]")]
     [ApiController]
     public class UserController(AppDbContext context) : ControllerBase
@@ -38,6 +37,7 @@ namespace Backend.Controllers
         }
 
         // POST: api/user
+        [Authorize]
         [HttpPost]
         public async Task<IActionResult> CreateUser([FromBody] User user)
         {
@@ -56,6 +56,7 @@ namespace Backend.Controllers
         }
 
         // PUT: api/user/{id}
+        [Authorize]
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdateUser(int id, [FromBody] User user)
         {
@@ -105,6 +106,7 @@ namespace Backend.Controllers
 
 
         // DELETE: api/user/{id}
+        [Authorize]
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteUser(int id)
         {

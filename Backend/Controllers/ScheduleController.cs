@@ -6,7 +6,6 @@ using Microsoft.AspNetCore.Authorization;
 
 namespace Backend.Controllers
 {
-    [Authorize]
     [Route("api/[controller]")]
     [ApiController]
     public class ScheduleController(AppDbContext context) : ControllerBase
@@ -36,6 +35,7 @@ namespace Backend.Controllers
         }
 
         // POST: api/schedule
+        [Authorize]
         [HttpPost]
         public async Task<ActionResult<Schedule>> PostSchedule(Schedule schedule)
         {
@@ -75,6 +75,7 @@ namespace Backend.Controllers
         }
 
         // PUT: api/schedule/{id}
+        [Authorize]
         [HttpPut("{id}")]
         public async Task<IActionResult> PutSchedule(int id, Schedule schedule)
         {
@@ -113,6 +114,7 @@ namespace Backend.Controllers
         }
 
         // DELETE: api/schedule/{id}
+        [Authorize]
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteSchedule(int id)
         {
