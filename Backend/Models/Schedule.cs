@@ -1,4 +1,5 @@
-﻿using System.ComponentModel.DataAnnotations;
+﻿using System;
+using System.ComponentModel.DataAnnotations;
 
 namespace Backend.Models
 {
@@ -6,15 +7,17 @@ namespace Backend.Models
     {
         [Key]
         public int Id { get; set; }
+
         [Required]
         public int ContentId { get; set; }
+
+        [Required]
+        public DateTime StartTime { get; set; }
+
+        [Required]
+        public DateTime EndTime { get; set; }
+
         public Content Content { get; set; }
-        [Required]
-        public DateTime ScheduledAt { get; set; }
-        public int DurationInSeconds { get; set; }
-        [Required]
-        public bool IsActive { get; set; } = true;
-        public int? UserId { get; set; }
-        public User User { get; set; }
+
     }
 }

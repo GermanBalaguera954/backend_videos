@@ -1,120 +1,127 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using Backend.Data;
+﻿using Backend.Data;
+using Backend.DTOs;
 using Backend.Models;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
-namespace Backend.Controllers
+[ApiController]
+[Route("api/[controller]")]
+public class ContentController : ControllerBase
 {
-    [Route("api/[controller]")]
-    [ApiController]
-    public class ContentController(AppDbContext context) : ControllerBase
+    private readonly AppDbContext _context;
+
+    public ContentController(AppDbContext context)
     {
-        private readonly AppDbContext _context = context;
+        _context = context;
+    }
 
-        // GET: api/content
-        [HttpGet]
-        public async Task<ActionResult<IEnumerable<Content>>> GetContents()
+    // Endpoint para crear contenido
+    [Authorize]
+    [HttpPost]
+    public async Task<IActionResult> CreateContent([FromBody] ContentDto contentDto)
+    {
+        if (!ModelState.IsValid)
         {
-            var contents = await _context.Contents.ToListAsync();
-            return Ok(contents);
+            return BadRequest(ModelState);
         }
 
-        // GET: api/content/{id}
-        [HttpGet("{id}")]
-        public async Task<ActionResult<Content>> GetContent(int id)
+        // Crear un nuevo contenido
+        var content = new Content
         {
-            var content = await _context.Contents.FindAsync(id);
+            Title = contentDto.Title,
+            ContentType = contentDto.ContentType,
+            VideoUrl = contentDto.VideoUrl,
+            BannerImageUrl = contentDto.BannerImageUrl,
+            BannerText = contentDto.BannerText,
+            Duration = contentDto.Duration,
+            UserId = 1
+        };
 
-            if (content == null)
-            {
-                return NotFound(new { mensaje = "Contenido no encontrado." });
-            }
+        _context.Contents.Add(content);
+        await _context.SaveChangesAsync();
 
-            return Ok(content);
+        return CreatedAtAction(nameof(GetContentById), new { id = content.Id }, content);
+    }
+
+    // Endpoint para obtener todos los contenidos
+    [HttpGet]
+    public async Task<IActionResult> GetAllContents()
+    {
+        var contents = await _context.Contents
+                                    .Include(c => c.User)
+                                    .ToListAsync();
+
+        if (contents == null || !contents.Any())
+        {
+            return NotFound(new { message = "No se encontraron contenidos." });
         }
 
-        // POST: api/content
-        [Authorize]
-        [HttpPost]
-        public async Task<ActionResult<Content>> PostContent(Content content)
+        return Ok(contents);
+    }
+
+    // Endpoint para obtener un contenido por su ID
+    [HttpGet("{id}")]
+    public async Task<IActionResult> GetContentById(int id)
+    {
+        var content = await _context.Contents
+                                    .Include(c => c.User)
+                                    .FirstOrDefaultAsync(c => c.Id == id);
+
+        if (content == null)
         {
-            // Validar tipo de contenido (VT, VBL, BT)
-            if (content.ContentType != "VT" && content.ContentType != "VBL" && content.ContentType != "BT")
-            {
-                return BadRequest(new { mensaje = "El tipo de contenido debe ser 'VT', 'VBL' o 'BT'." });
-            }
-
-            // Validar contenido de tipo 'VBL': debe incluir banner (imagen o texto)
-            if (content.ContentType == "VBL" && (string.IsNullOrEmpty(content.BannerImageUrl) && string.IsNullOrEmpty(content.BannerText)))
-            {
-                return BadRequest(new { mensaje = "El contenido de tipo 'VBL' debe incluir una imagen de banner o un texto de banner." });
-            }
-
-            // Agregar nuevo contenido
-            _context.Contents.Add(content);
-            await _context.SaveChangesAsync();
-
-            return CreatedAtAction("GetContent", new { id = content.Id }, content);
+            return NotFound(new { message = "Contenido no encontrado." });
         }
 
-        // PUT: api/content/{id}
-        [Authorize]
-        [HttpPut("{id}")]
-        public async Task<IActionResult> PutContent(int id, Content content)
+        return Ok(content);
+    }
+
+    // Endpoint para actualizar un contenido
+    [Authorize]
+    [HttpPut("{id}")]
+    public async Task<IActionResult> UpdateContent(int id, [FromBody] ContentDto contentDto)
+    {
+        if (!ModelState.IsValid)
         {
-            if (id != content.Id)
-            {
-                return BadRequest(new { mensaje = "El ID del contenido no coincide." });
-            }
+            return BadRequest(ModelState);
+        }
+               
+        var content = await _context.Contents.FindAsync(id);
 
-            var existingContent = await _context.Contents.FindAsync(id);
-            if (existingContent == null)
-            {
-                return NotFound(new { mensaje = "Contenido no encontrado." });
-            }
-
-            // Se valida tipo de contenido (VT, VBL, BT)
-            if (content.ContentType != "VT" && content.ContentType != "VBL" && content.ContentType != "BT")
-            {
-                return BadRequest(new { mensaje = "El tipo de contenido debe ser 'VT', 'VBL' o 'BT'." });
-            }
-
-            // Se valida el contenido de tipo 'VBL'
-            if (content.ContentType == "VBL" && (string.IsNullOrEmpty(content.BannerImageUrl) && string.IsNullOrEmpty(content.BannerText)))
-            {
-                return BadRequest(new { mensaje = "El contenido de tipo 'VBL' debe incluir una imagen de banner o un texto de banner." });
-            }
-
-            // Actualizar el contenido
-            existingContent.Title = content.Title;
-            existingContent.ContentType = content.ContentType;
-            existingContent.VideoUrl = content.VideoUrl;
-            existingContent.BannerImageUrl = content.BannerImageUrl;
-            existingContent.BannerText = content.BannerText;
-            existingContent.DurationInSeconds = content.DurationInSeconds;
-
-            _context.Entry(existingContent).State = EntityState.Modified;
-            await _context.SaveChangesAsync();
-
-            return NoContent();
+        if (content == null)
+        {
+            return NotFound(new { message = "Contenido no encontrado." });
         }
 
-        // DELETE: api/content/{id}
-        [Authorize]
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteContent(int id)
+        // Actualizar los campos
+        content.Title = contentDto.Title;
+        content.ContentType = contentDto.ContentType;
+        content.VideoUrl = contentDto.VideoUrl;
+        content.BannerImageUrl = contentDto.BannerImageUrl;
+        content.BannerText = contentDto.BannerText;
+        content.Duration = contentDto.Duration;
+
+        _context.Contents.Update(content);
+        await _context.SaveChangesAsync();
+
+        return NoContent();
+    }
+
+    // Endpoint para eliminar un contenido
+    [Authorize]
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> DeleteContent(int id)
+    {
+        var content = await _context.Contents.FindAsync(id);
+
+        if (content == null)
         {
-            var content = await _context.Contents.FindAsync(id);
-            if (content == null)
-            {
-                return NotFound(new { mensaje = "Contenido no encontrado." });
-            }
-
-            _context.Contents.Remove(content);
-            await _context.SaveChangesAsync();
-
-            return NoContent();
+            return NotFound(new { message = "Contenido no encontrado." });
         }
+
+        _context.Contents.Remove(content);
+        await _context.SaveChangesAsync();
+
+        return NoContent();
     }
 }

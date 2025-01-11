@@ -1,130 +1,116 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
-using Backend.Data;
+﻿using Backend.Data;
+using Backend.DTOs;
 using Backend.Models;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Authorization;
 
-namespace Backend.Controllers
+[ApiController]
+[Route("api/[controller]")]
+public class UserController : ControllerBase
 {
-    [Route("api/[controller]")]
-    [ApiController]
-    public class UserController(AppDbContext context) : ControllerBase
+    private readonly AppDbContext _context;
+    private readonly PasswordHasher<User> _passwordHasher;
+
+    public UserController(AppDbContext context)
     {
-        private readonly AppDbContext _context = context;
-        private readonly PasswordHasher<User> _passwordHasher = new();
+        _context = context;
+        _passwordHasher = new PasswordHasher<User>();
+    }
 
-        // GET: api/user
-        [HttpGet]
-        public async Task<IActionResult> GetUsers()
+    // Endpoint para crear un usuario
+    [Authorize]
+    [HttpPost]
+    public async Task<IActionResult> CreateUser([FromBody] UserDto userDto)
+    {
+        if (!ModelState.IsValid)
         {
-            var users = await _context.Users.Include(u => u.Role).ToListAsync();
-            return Ok(users);
+            return BadRequest(ModelState);
         }
 
-        // GET: api/user/{id}
-        [HttpGet("{id}")]
-        public async Task<IActionResult> GetUser(int id)
+        // Verifica si el correo ya está registrado
+        var existingUser = await _context.Users.FirstOrDefaultAsync(u => u.Email == userDto.Email);
+        if (existingUser != null)
         {
-            var user = await _context.Users.Include(u => u.Role).FirstOrDefaultAsync(u => u.Id == id);
-
-            if (user == null)
-            {
-                return NotFound();
-            }
-
-            return Ok(user);
+            return BadRequest(new { message = "El correo electrónico ya está registrado." });
         }
 
-        // POST: api/user
-        [Authorize]
-        [HttpPost]
-        public async Task<IActionResult> CreateUser([FromBody] User user)
+        // Crear un nuevo usuario
+        var user = new User
         {
-            if (user == null)
-            {
-                return BadRequest("El usuario no puede ser nulo.");
-            }
+            UserName = userDto.UserName,
+            Email = userDto.Email,
+            PasswordHash = _passwordHasher.HashPassword(null, userDto.Password),
+            Role = userDto.Role ?? "user"
+        };
 
-            // Se encripta la contraseña antes de guardarla
-            user.Password = _passwordHasher.HashPassword(user, user.Password);
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
 
-            _context.Users.Add(user);
-            await _context.SaveChangesAsync();
+        return CreatedAtAction(nameof(GetAllUsers), new { id = user.Id }, user);
+    }
 
-            return CreatedAtAction(nameof(GetUser), new { id = user.Id }, user);
+
+    // Endpoint para obtener todos los usuarios
+    [HttpGet]
+    public async Task<IActionResult> GetAllUsers()
+    {
+        var users = await _context.Users.ToListAsync();
+
+        if (users == null || !users.Any())
+        {
+            return NotFound(new { message = "No se encontraron usuarios." });
         }
 
-        // PUT: api/user/{id}
-        [Authorize]
-        [HttpPut("{id}")]
-        public async Task<IActionResult> UpdateUser(int id, [FromBody] User user)
+        return Ok(users);
+    }
+
+
+    // Endpoint para actualizar un usuario
+    [Authorize]
+    [HttpPut("{id}")]
+    public async Task<IActionResult> UpdateUser(int id, [FromBody] UserDto userDto)
+    {
+        if (!ModelState.IsValid)
         {
-            if (id != user.Id)
-            {
-                return BadRequest("El ID del usuario no coincide con el ID proporcionado.");
-            }
-
-            var existingUser = await _context.Users.FindAsync(id);
-            if (existingUser == null)
-            {
-                return NotFound();
-            }
-
-            // Si la contraseña es cambiada, se encripta y actualiza el campo 'IsPasswordResetRequired'
-            if (!string.IsNullOrEmpty(user.Password))
-            {
-                existingUser.Password = _passwordHasher.HashPassword(existingUser, user.Password);
-                existingUser.IsPasswordResetRequired = false;
-            }
-
-            // Actualizamos los otros campos si es necesario
-            existingUser.Name = user.Name;
-            existingUser.Email = user.Email;
-            existingUser.RoleId = user.RoleId;
-
-            _context.Entry(existingUser).State = EntityState.Modified;
-
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!UserExists(id))
-                {
-                    return NotFound();
-                }
-                else
-                {
-                    throw;
-                }
-            }
-
-            return NoContent();
+            return BadRequest(ModelState);
         }
 
+        var user = await _context.Users.FindAsync(id);
 
-        // DELETE: api/user/{id}
-        [Authorize]
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteUser(int id)
+        if (user == null)
         {
-            var user = await _context.Users.FindAsync(id);
-            if (user == null)
-            {
-                return NotFound();
-            }
-
-            _context.Users.Remove(user);
-            await _context.SaveChangesAsync();
-
-            return NoContent();
+            return NotFound(new { message = "Usuario no encontrado." });
         }
 
-        private bool UserExists(int id)
+        user.UserName = userDto.UserName;
+        user.Email = userDto.Email;
+        user.PasswordHash = _passwordHasher.HashPassword(user, userDto.Password);
+        user.Role = userDto.Role ?? user.Role;
+
+        _context.Users.Update(user);
+        await _context.SaveChangesAsync();
+
+        return NoContent();
+    }
+
+
+    // Endpoint para eliminar un usuario
+    [Authorize]
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> DeleteUser(int id)
+    {
+        var user = await _context.Users.FindAsync(id);
+
+        if (user == null)
         {
-            return _context.Users.Any(e => e.Id == id);
+            return NotFound(new { message = "Usuario no encontrado." });
         }
+
+        _context.Users.Remove(user);
+        await _context.SaveChangesAsync();
+
+        return NoContent();
     }
 }

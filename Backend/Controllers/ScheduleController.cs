@@ -1,195 +1,203 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using Backend.Data;
+﻿using Backend.Data;
+using Backend.DTOs;
 using Backend.Models;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
-namespace Backend.Controllers
+[ApiController]
+[Route("api/[controller]")]
+public class ScheduleController : ControllerBase
 {
-    [Route("api/[controller]")]
-    [ApiController]
-    public class ScheduleController(AppDbContext context) : ControllerBase
+    private readonly AppDbContext _context;
+
+    public ScheduleController(AppDbContext context)
     {
-        private readonly AppDbContext _context = context;
+        _context = context;
+    }
 
-        // GET: api/schedule
-        [HttpGet]
-        public async Task<ActionResult<IEnumerable<Schedule>>> GetSchedules()
+    // Endpoint para crear una programación
+    [Authorize]
+    [HttpPost]
+    public async Task<IActionResult> CreateSchedule([FromBody] ScheduleDto scheduleDto)
+    {
+        if (!ModelState.IsValid)
         {
-            var schedules = await _context.Schedules.Include(s => s.Content).Include(s => s.User).ToListAsync();
-            return Ok(schedules);
+            return BadRequest(ModelState);
         }
 
-        // GET: api/schedule/{id}
-        [HttpGet("{id}")]
-        public async Task<ActionResult<Schedule>> GetSchedule(int id)
+        // Verifica si el contenido existe
+        var content = await _context.Contents.FindAsync(scheduleDto.ContentId);
+        if (content == null)
         {
-            var schedule = await _context.Schedules.Include(s => s.Content).Include(s => s.User).FirstOrDefaultAsync(s => s.Id == id);
-
-            if (schedule == null)
-            {
-                return NotFound(new { mensaje = "Programación no encontrada." });
-            }
-
-            return Ok(schedule);
+            return BadRequest(new { message = "El contenido no existe." });
         }
 
-        // POST: api/schedule
-        [Authorize]
-        [HttpPost]
-        public async Task<ActionResult<Schedule>> PostSchedule(Schedule schedule)
+        // Calcular EndTime según la duración proporcionada por el usuario
+        DateTime endTime = scheduleDto.StartTime.AddSeconds(content.Duration ?? 5);
+
+        // Verificar si la programación se solapa con alguna existente
+        var conflictingSchedule = await _context.Schedules
+            .Where(s => s.ContentId == scheduleDto.ContentId &&
+                        (s.StartTime < endTime && s.EndTime > scheduleDto.StartTime)) // Verificar solapamiento
+            .FirstOrDefaultAsync();
+
+        if (conflictingSchedule != null)
         {
-            // Verifica que el contenido existe en la base de datos
-            var content = await _context.Contents.FindAsync(schedule.ContentId);
-            if (content == null)
+            // Si hay un conflicto, se ajusta el StartTime para que espere hasta que el contenido anterior termine
+            var adjustedStartTime = conflictingSchedule.EndTime;
+            endTime = adjustedStartTime.AddSeconds(content.Duration ?? 5); // Calculamos el nuevo EndTime
+
+            // Devolvemos un mensaje informando que el contenido ha sido ajustado
+            return BadRequest(new
             {
-                return BadRequest(new { mensaje = "El contenido especificado no existe." });
-            }
-
-            // Valida si el contenido es un banner y si la duración está configurada
-            if ((content.ContentType == "BT" || content.ContentType == "VBL") && schedule.DurationInSeconds <= 0)
-            {
-                return BadRequest(new { mensaje = "La duración del banner debe ser mayor a cero segundos." });
-            }
-
-            // Verifica si ya existe una programación para el mismo horario
-            var overlappingSchedule = await _context.Schedules
-                .Where(s => s.ScheduledAt == schedule.ScheduledAt && s.ContentId == schedule.ContentId)
-                .FirstOrDefaultAsync();
-
-            if (overlappingSchedule != null)
-            {
-                return BadRequest(new { mensaje = "Ya existe una programación para este contenido en el mismo horario." });
-            }
-
-            // Asignar un usuario por defecto
-            if (schedule.UserId == 0)
-            {
-                schedule.UserId = 1;
-            }
-
-            _context.Schedules.Add(schedule);
-            await _context.SaveChangesAsync();
-
-            return CreatedAtAction("GetSchedule", new { id = schedule.Id }, schedule);
-        }
-
-        // PUT: api/schedule/{id}
-        [Authorize]
-        [HttpPut("{id}")]
-        public async Task<IActionResult> PutSchedule(int id, Schedule schedule)
-        {
-            if (id != schedule.Id)
-            {
-                return BadRequest(new { mensaje = "El ID de la programación no coincide." });
-            }
-
-            // Verificar si la programación existe
-            var existingSchedule = await _context.Schedules.FindAsync(id);
-            if (existingSchedule == null)
-            {
-                return NotFound(new { mensaje = "Programación no encontrada." });
-            }
-
-            // Verificar si ya existe una programación para el mismo horario
-            var overlappingSchedule = await _context.Schedules
-                .Where(s => s.ScheduledAt == schedule.ScheduledAt && s.ContentId == schedule.ContentId && s.Id != id)
-                .FirstOrDefaultAsync();
-
-            if (overlappingSchedule != null)
-            {
-                return BadRequest(new { mensaje = "Ya existe una programación para este contenido en el mismo horario." });
-            }
-
-            // Actualizar la programación
-            existingSchedule.ContentId = schedule.ContentId;
-            existingSchedule.ScheduledAt = schedule.ScheduledAt;
-            existingSchedule.DurationInSeconds = schedule.DurationInSeconds;
-            existingSchedule.UserId = schedule.UserId;
-
-            _context.Entry(existingSchedule).State = EntityState.Modified;
-            await _context.SaveChangesAsync();
-
-            return NoContent();
-        }
-
-        // DELETE: api/schedule/{id}
-        [Authorize]
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteSchedule(int id)
-        {
-            var schedule = await _context.Schedules.FindAsync(id);
-            if (schedule == null)
-            {
-                return NotFound(new { mensaje = "Programación no encontrada." });
-            }
-
-            _context.Schedules.Remove(schedule);
-            await _context.SaveChangesAsync();
-
-            return NoContent();
-        }
-        // Endpoint para obtener el siguiente contenido programado
-        [HttpGet("next/{currentContentId}")]
-        public async Task<IActionResult> GetNextScheduledContent(int currentContentId)
-        {
-            var currentSchedule = await _context.Schedules
-                .Where(s => s.ContentId == currentContentId)
-                .OrderBy(s => s.ScheduledAt)
-                .FirstOrDefaultAsync();
-
-            if (currentSchedule == null)
-            {
-                return NotFound(new { mensaje = "Contenido no encontrado en la programación." });
-            }
-
-            // Buscar el siguiente contenido programado
-            var nextSchedule = await _context.Schedules
-                .Where(s => s.ScheduledAt > currentSchedule.ScheduledAt)
-                .OrderBy(s => s.ScheduledAt)
-                .FirstOrDefaultAsync();
-
-            if (nextSchedule == null)
-            {
-                return NotFound(new { mensaje = "No hay contenido programado para la siguiente reproducción." });
-            }
-
-            var nextContent = await _context.Contents.FindAsync(nextSchedule.ContentId);
-
-            if (nextContent == null)
-            {
-                return NotFound(new { mensaje = "Contenido no encontrado." });
-            }
-
-            // Si es un banner, se considera su duración en la programación
-            if (nextContent.ContentType == "BT" || nextContent.ContentType == "VBL")
-            {
-                var nextEndTime = nextSchedule.ScheduledAt.AddSeconds(nextSchedule.DurationInSeconds);
-                return Ok(new
-                {
-                    nextContent.Id,
-                    nextContent.Title,
-                    nextContent.ContentType,
-                    nextContent.VideoUrl,
-                    nextContent.BannerImageUrl,
-                    nextContent.BannerText,
-                    nextSchedule.ScheduledAt,
-                    nextEndTime,
-                    nextSchedule.DurationInSeconds
-                });
-            }
-
-            return Ok(new
-            {
-                nextContent.Id,
-                nextContent.Title,
-                nextContent.ContentType,
-                nextContent.VideoUrl,
-                nextContent.BannerImageUrl,
-                nextContent.BannerText,
-                nextSchedule.ScheduledAt,
-                nextSchedule.DurationInSeconds
+                message = $"La programación se solapa con otro contenido. El contenido se reprogramará para comenzar a las {adjustedStartTime:HH:mm:ss}.",
+                newStartTime = adjustedStartTime
             });
         }
+
+        // Crear la nueva programación
+        var schedule = new Schedule
+        {
+            ContentId = scheduleDto.ContentId,
+            StartTime = scheduleDto.StartTime,
+            EndTime = endTime
+        };
+
+        _context.Schedules.Add(schedule);
+        await _context.SaveChangesAsync();
+
+        return CreatedAtAction(nameof(GetScheduleById), new { id = schedule.Id }, schedule);
+    }
+
+
+    // Endpoint para obtener los contenidos programados
+    [HttpGet("scheduled")]
+    public async Task<IActionResult> GetScheduledContents()
+    {
+        var currentTime = DateTime.UtcNow; // Hora actual en UTC
+
+        var scheduledContents = await _context.Schedules
+            .Include(s => s.Content)
+            .ToListAsync();
+
+        // Convertir las fechas a UTC en el cliente después de traer los datos
+        var filteredContents = scheduledContents
+            .Where(s => s.StartTime.ToUniversalTime() <= currentTime && s.EndTime.ToUniversalTime() >= currentTime)
+            .ToList();
+
+        if (filteredContents == null || !filteredContents.Any())
+        {
+            return NotFound(new { message = "No hay contenidos programados." });
+        }
+
+        var contents = filteredContents.Select(s => s.Content).ToList();
+        return Ok(contents);
+    }
+
+    // Endpoint para obtener todas las programaciones
+    [HttpGet]
+    public async Task<IActionResult> GetAllSchedules()
+    {
+        var schedules = await _context.Schedules.Include(s => s.Content).ToListAsync();
+
+        if (schedules == null || !schedules.Any())
+        {
+            return NotFound(new { message = "No se encontraron programaciones." });
+        }
+
+        return Ok(schedules);
+    }
+
+    // Endpoint para obtener una programación por ID
+    [HttpGet("{id}")]
+    public async Task<IActionResult> GetScheduleById(int id)
+    {
+        var schedule = await _context.Schedules
+            .Include(s => s.Content)
+            .FirstOrDefaultAsync(s => s.Id == id);
+
+        if (schedule == null)
+        {
+            return NotFound(new { message = "Programación no encontrada." });
+        }
+
+        return Ok(schedule);
+    }
+
+    // Endpoint para actualizar una programación
+    [Authorize]
+    [HttpPut("{id}")]
+    public async Task<IActionResult> UpdateSchedule(int id, [FromBody] ScheduleDto scheduleDto)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+
+        var schedule = await _context.Schedules.FindAsync(id);
+        if (schedule == null)
+        {
+            return NotFound(new { message = "Programación no encontrada." });
+        }
+
+        // Verificar si el contenido existe
+        var content = await _context.Contents.FindAsync(scheduleDto.ContentId);
+        if (content == null)
+        {
+            return BadRequest(new { message = "El contenido no existe." });
+        }
+
+        // Calcular EndTime según la duración proporcionada por el usuario
+        DateTime endTime = scheduleDto.StartTime.AddSeconds(content.Duration ?? 5);
+
+        // Verificar si la programación se solapa con alguna existente
+        var conflictingSchedule = await _context.Schedules
+            .Where(s => s.ContentId == scheduleDto.ContentId &&
+                        s.Id != id && // Excluir la programación actual si se está actualizando
+                        (s.StartTime < endTime && s.EndTime > scheduleDto.StartTime)) // Verificar solapamiento de tiempos
+            .FirstOrDefaultAsync();
+
+        if (conflictingSchedule != null)
+        {
+            // Si hay un conflicto, ajustamos el StartTime para que espere hasta que el contenido anterior termine
+            var adjustedStartTime = conflictingSchedule.EndTime;
+            endTime = adjustedStartTime.AddSeconds(content.Duration ?? 5);
+
+            // Devolvemos un mensaje informando que el contenido ha sido ajustado
+            return BadRequest(new
+            {
+                message = $"La programación se solapa con otro contenido. El contenido se reprogramará para comenzar a las {adjustedStartTime:HH:mm:ss}.",
+                newStartTime = adjustedStartTime
+            });
+        }
+
+        // Actualizar la programación
+        schedule.ContentId = scheduleDto.ContentId;
+        schedule.StartTime = scheduleDto.StartTime;
+        schedule.EndTime = endTime;
+
+        _context.Schedules.Update(schedule);
+        await _context.SaveChangesAsync();
+
+        return NoContent();
+    }
+
+    // Endpoint para eliminar una programación
+    [Authorize]
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> DeleteSchedule(int id)
+    {
+        var schedule = await _context.Schedules.FindAsync(id);
+
+        if (schedule == null)
+        {
+            return NotFound(new { message = "Programación no encontrada." });
+        }
+
+        _context.Schedules.Remove(schedule);
+        await _context.SaveChangesAsync();
+
+        return NoContent();
     }
 }

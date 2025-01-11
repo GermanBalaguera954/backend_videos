@@ -1,11 +1,8 @@
 ﻿using Backend.Data;
 using Backend.DTOs;
-using Backend.Helpers;
 using Backend.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-
 
 [ApiController]
 [Route("api/[controller]")]
@@ -31,57 +28,30 @@ public class AuthController : ControllerBase
             return BadRequest(ModelState);
         }
 
-        // Lógica para asignar un rol de admin por defecto si el correo y la contraseña coinciden con los valores predeterminados
-        if (login.Email == "admin@example.com" && login.Password == "Segura123")
-        {
-            // Aquí creamos un usuario con rol de "admin" por defecto
-            var adminRole = "Admin";
-            var token = JwtHelper.GenerateJwtToken(
-                _configuration["Jwt:Key"],
-                _configuration["Jwt:Issuer"],
-                _configuration["Jwt:Audience"],
-                login.Email,
-                "SuperAdmin",
-                adminRole
-            );
+        // Busca el usuario por correo electrónico
+        var user = _context.Users.FirstOrDefault(u => u.Email == login.Email);
 
-            return Ok(new
-            {
-                Token = token,
-                Role = adminRole,
-                UserName = "SuperAdmin"
-            });
-        }
-
-        // Si no es el admin por defecto, buscamos al usuario en la base de datos
-        var user = _context.Users.Include(u => u.Role).FirstOrDefault(u => u.Email == login.Email);
-
-        // Verificar si el usuario existe y si la contraseña es correcta
-        if (user == null || _passwordHasher.VerifyHashedPassword(user, user.Password, login.Password) == PasswordVerificationResult.Failed)
+        // Verifica si el usuario no existe o la contraseña es incorrecta
+        if (user == null || _passwordHasher.VerifyHashedPassword(user, user.PasswordHash, login.Password) == PasswordVerificationResult.Failed)
         {
             return Unauthorized(new { mensaje = "Email o contraseña incorrectos." });
         }
 
-        if (user.Role == null)
-        {
-            return Unauthorized(new { mensaje = "El usuario no tiene un rol asignado." });
-        }
-
-        // Generar el JWT con el rol que está asignado al usuario
-        var anotherToken = JwtHelper.GenerateJwtToken(
+        // Generar el JWT con el email y el username del usuario
+        var token = JwtHelper.GenerateJwtToken(
             _configuration["Jwt:Key"],
             _configuration["Jwt:Issuer"],
             _configuration["Jwt:Audience"],
             user.Email,
-            user.Name,
-            user.Role.Name
+            user.UserName
         );
 
+        // Devuelve el token junto con el email y el username
         return Ok(new
         {
-            Token = anotherToken,
-            Role = user.Role.Name,
-            UserName = user.Name
+            Token = token,
+            Correo = user.Email,
+            NombreUsario = user.UserName
         });
     }
 }
