@@ -1,5 +1,4 @@
-﻿using System;
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 
 namespace Backend.Models
 {
@@ -18,6 +17,5 @@ namespace Backend.Models
         public DateTime EndTime { get; set; }
 
         public Content Content { get; set; }
-
     }
 }

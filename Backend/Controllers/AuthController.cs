@@ -32,7 +32,7 @@ public class AuthController : ControllerBase
         var user = _context.Users.FirstOrDefault(u => u.Email == login.Email);
 
         // Verifica si el usuario no existe o la contraseña es incorrecta
-        if (user == null || _passwordHasher.VerifyHashedPassword(user, user.PasswordHash, login.Password) == PasswordVerificationResult.Failed)
+        if (user == null || _passwordHasher.VerifyHashedPassword(user, user.PasswordHash, login.PasswordHash) == PasswordVerificationResult.Failed)
         {
             return Unauthorized(new { mensaje = "Email o contraseña incorrectos." });
         }

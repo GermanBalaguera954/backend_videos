@@ -20,7 +20,6 @@ public class UserController : ControllerBase
     }
 
     // Endpoint para crear un usuario
-    [Authorize]
     [HttpPost]
     public async Task<IActionResult> CreateUser([FromBody] UserDto userDto)
     {
@@ -29,11 +28,17 @@ public class UserController : ControllerBase
             return BadRequest(ModelState);
         }
 
-        // Verifica si el correo ya está registrado
-        var existingUser = await _context.Users.FirstOrDefaultAsync(u => u.Email == userDto.Email);
-        if (existingUser != null)
+        // Verifica si el correo o nombre de usuario ya están registrados
+        var existingUserEmail = await _context.Users.FirstOrDefaultAsync(u => u.Email == userDto.Email);
+        if (existingUserEmail != null)
         {
             return BadRequest(new { message = "El correo electrónico ya está registrado." });
+        }
+
+        var existingUserName = await _context.Users.FirstOrDefaultAsync(u => u.UserName == userDto.UserName);
+        if (existingUserName != null)
+        {
+            return BadRequest(new { message = "El nombre de usuario ya está registrado." });
         }
 
         // Crear un nuevo usuario
@@ -51,7 +56,6 @@ public class UserController : ControllerBase
         return CreatedAtAction(nameof(GetAllUsers), new { id = user.Id }, user);
     }
 
-
     // Endpoint para obtener todos los usuarios
     [HttpGet]
     public async Task<IActionResult> GetAllUsers()
@@ -66,9 +70,7 @@ public class UserController : ControllerBase
         return Ok(users);
     }
 
-
     // Endpoint para actualizar un usuario
-    [Authorize]
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdateUser(int id, [FromBody] UserDto userDto)
     {
@@ -81,7 +83,7 @@ public class UserController : ControllerBase
 
         if (user == null)
         {
-            return NotFound(new { message = "Usuario no encontrado." });
+            return NotFound(new { message = $"Usuario con id {id} no encontrado." });
         }
 
         user.UserName = userDto.UserName;
@@ -95,7 +97,6 @@ public class UserController : ControllerBase
         return NoContent();
     }
 
-
     // Endpoint para eliminar un usuario
     [Authorize]
     [HttpDelete("{id}")]
@@ -105,7 +106,7 @@ public class UserController : ControllerBase
 
         if (user == null)
         {
-            return NotFound(new { message = "Usuario no encontrado." });
+            return NotFound(new { message = $"Usuario con id {id} no encontrado." });
         }
 
         _context.Users.Remove(user);

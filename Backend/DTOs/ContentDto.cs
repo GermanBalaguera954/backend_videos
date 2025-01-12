@@ -13,10 +13,11 @@ namespace Backend.DTOs
         public string ContentType { get; set; }
 
         public string VideoUrl { get; set; }
+
         public string BannerImageUrl { get; set; }
+        
         public string BannerText { get; set; }
 
-        [Range(1, int.MaxValue, ErrorMessage = "La duración debe ser mayor a 0.")]
         public int Duration { get; set; }
     }
 }

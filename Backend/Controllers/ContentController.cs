@@ -4,6 +4,7 @@ using Backend.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 [ApiController]
 [Route("api/[controller]")]
@@ -15,8 +16,6 @@ public class ContentController : ControllerBase
     {
         _context = context;
     }
-
-    // Endpoint para crear contenido
     [Authorize]
     [HttpPost]
     public async Task<IActionResult> CreateContent([FromBody] ContentDto contentDto)
@@ -26,7 +25,6 @@ public class ContentController : ControllerBase
             return BadRequest(ModelState);
         }
 
-        // Crear un nuevo contenido
         var content = new Content
         {
             Title = contentDto.Title,
@@ -44,13 +42,10 @@ public class ContentController : ControllerBase
         return CreatedAtAction(nameof(GetContentById), new { id = content.Id }, content);
     }
 
-    // Endpoint para obtener todos los contenidos
     [HttpGet]
     public async Task<IActionResult> GetAllContents()
     {
-        var contents = await _context.Contents
-                                    .Include(c => c.User)
-                                    .ToListAsync();
+        var contents = await _context.Contents.ToListAsync();
 
         if (contents == null || !contents.Any())
         {
@@ -60,7 +55,6 @@ public class ContentController : ControllerBase
         return Ok(contents);
     }
 
-    // Endpoint para obtener un contenido por su ID
     [HttpGet("{id}")]
     public async Task<IActionResult> GetContentById(int id)
     {
@@ -76,7 +70,6 @@ public class ContentController : ControllerBase
         return Ok(content);
     }
 
-    // Endpoint para actualizar un contenido
     [Authorize]
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdateContent(int id, [FromBody] ContentDto contentDto)
@@ -85,13 +78,16 @@ public class ContentController : ControllerBase
         {
             return BadRequest(ModelState);
         }
-               
+
         var content = await _context.Contents.FindAsync(id);
 
         if (content == null)
         {
             return NotFound(new { message = "Contenido no encontrado." });
         }
+
+        // Obtener la duración anterior
+        var previousDuration = content.Duration;
 
         // Actualizar los campos
         content.Title = contentDto.Title;
@@ -104,10 +100,30 @@ public class ContentController : ControllerBase
         _context.Contents.Update(content);
         await _context.SaveChangesAsync();
 
+        // Si la duración del contenido ha cambiado, actualizar las programaciones relacionadas
+        if (previousDuration != content.Duration)
+        {
+            var schedulesToUpdate = await _context.Schedules
+                .Where(s => s.ContentId == content.Id)
+                .ToListAsync();
+
+            foreach (var schedule in schedulesToUpdate)
+            {
+                // Calcular el nuevo EndTime según la nueva duración
+                var startTime = schedule.StartTime;
+                var newEndTime = startTime.AddSeconds(content.Duration.Value);
+
+                // Actualizar la programación con el nuevo EndTime
+                schedule.EndTime = newEndTime;
+                _context.Schedules.Update(schedule);
+            }
+
+            await _context.SaveChangesAsync();
+        }
+
         return NoContent();
     }
 
-    // Endpoint para eliminar un contenido
     [Authorize]
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteContent(int id)
@@ -117,6 +133,13 @@ public class ContentController : ControllerBase
         if (content == null)
         {
             return NotFound(new { message = "Contenido no encontrado." });
+        }
+
+        // Verificar si el contenido pertenece al usuario autenticado
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (content.UserId != int.Parse(userId))
+        {
+            return Unauthorized(new { message = "No tienes permisos para eliminar este contenido." });
         }
 
         _context.Contents.Remove(content);
