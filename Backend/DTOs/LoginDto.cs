@@ -9,6 +9,6 @@ namespace Backend.DTOs
         public string Email { get; set; }
 
         [Required(ErrorMessage = "La contraseña es obligatoria.")]
-        public string PasswordHash { get; set; }
+        public string Password { get; set; }
     }
 }

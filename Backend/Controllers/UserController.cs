@@ -1,10 +1,10 @@
 ﻿using Backend.Data;
 using Backend.DTOs;
 using Backend.Models;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.AspNetCore.Identity;
-using Microsoft.AspNetCore.Authorization;
 
 [ApiController]
 [Route("api/[controller]")]
@@ -41,12 +41,18 @@ public class UserController : ControllerBase
             return BadRequest(new { message = "El nombre de usuario ya está registrado." });
         }
 
+        // Verifica si la contraseña no es nula
+        if (string.IsNullOrEmpty(userDto.Password))
+        {
+            return BadRequest(new { message = "La contraseña es obligatoria." });
+        }
+
         // Crear un nuevo usuario
         var user = new User
         {
             UserName = userDto.UserName,
             Email = userDto.Email,
-            PasswordHash = _passwordHasher.HashPassword(null, userDto.Password),
+            PasswordHash = _passwordHasher.HashPassword(new User(), userDto.Password),
             Role = userDto.Role ?? "user"
         };
 
@@ -55,6 +61,7 @@ public class UserController : ControllerBase
 
         return CreatedAtAction(nameof(GetAllUsers), new { id = user.Id }, user);
     }
+
 
     // Endpoint para obtener todos los usuarios
     [HttpGet]
@@ -67,7 +74,16 @@ public class UserController : ControllerBase
             return NotFound(new { message = "No se encontraron usuarios." });
         }
 
-        return Ok(users);
+        // Convertimos a DTO para no incluir el passwordHash ni el password
+        var userDtos = users.Select(user => new UserDto
+        {
+            Id = user.Id,
+            UserName = user.UserName,
+            Email = user.Email,
+            Role = user.Role
+        }).ToList();
+
+        return Ok(userDtos);
     }
 
     // Endpoint para actualizar un usuario
@@ -86,9 +102,16 @@ public class UserController : ControllerBase
             return NotFound(new { message = $"Usuario con id {id} no encontrado." });
         }
 
+        // Solo actualizar los campos necesarios
         user.UserName = userDto.UserName;
         user.Email = userDto.Email;
-        user.PasswordHash = _passwordHasher.HashPassword(user, userDto.Password);
+
+        // Si la contraseña es proporcionada, la hasheamos
+        if (!string.IsNullOrEmpty(userDto.Password))
+        {
+            user.PasswordHash = _passwordHasher.HashPassword(user, userDto.Password);
+        }
+
         user.Role = userDto.Role ?? user.Role;
 
         _context.Users.Update(user);

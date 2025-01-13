@@ -4,6 +4,8 @@ namespace Backend.DTOs
 {
     public class UserDto
     {
+        public int Id { get; set; }
+
         [Required(ErrorMessage = "El nombre de usuario es obligatorio.")]
         [MaxLength(50, ErrorMessage = "El nombre de usuario no puede tener más de 50 caracteres.")]
         public string UserName { get; set; }
@@ -13,10 +15,8 @@ namespace Backend.DTOs
         [MaxLength(100, ErrorMessage = "El email no puede tener más de 100 caracteres.")]
         public string Email { get; set; }
 
-        [Required(ErrorMessage = "La contraseña es obligatoria.")]
-        [MinLength(6, ErrorMessage = "La contraseña debe tener al menos 6 caracteres.")]
-        [MaxLength(200, ErrorMessage = "La contraseña no puede tener más de 200 caracteres.")]
-        public string Password { get; set; }
+        // El campo Password es solo necesario para la creación y actualización, no para la obtención de usuarios
+        public string? Password { get; set; }  // Lo dejamos como opcional para crear o actualizar
 
         [MaxLength(20, ErrorMessage = "El rol no puede tener más de 20 caracteres.")]
         public string Role { get; set; }
