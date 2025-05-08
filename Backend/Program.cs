@@ -2,11 +2,18 @@ using Backend.Data;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
+// Configura el puerto para HTTP
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.ListenAnyIP(5000); // Configuración del puerto HTTP
+});
+
+// Agregar servicios al contenedor.
 builder.Services.AddControllers();
 
 // Configuración de DbContext
@@ -28,7 +35,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]))
         };
 
-        // Comentarios para el manejo de eventos de error del token
+        // Manejo de errores del token
         options.Events = new JwtBearerEvents
         {
             OnAuthenticationFailed = context =>
@@ -48,13 +55,14 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
-// Configuración de CORS
-builder.Services.AddCors(options =>
+// Configuración de Swagger
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(options =>
 {
-    options.AddPolicy("AllowAll", policy =>
-        policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
+    options.SwaggerDoc("v1", new OpenApiInfo { Title = "Mi API", Version = "v1" });
 });
 
+// Construir la aplicación
 var app = builder.Build();
 
 // Configuración de seguridad de cabeceras
@@ -68,15 +76,26 @@ app.Use(async (context, next) =>
     await next.Invoke();
 });
 
-// Configurar la redirección de HTTP a HTTPS
-if (app.Environment.IsProduction())
+// Habilitar Swagger solo en desarrollo
+if (app.Environment.IsDevelopment())
 {
-    app.UseHsts();
+    app.UseSwagger();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Mi API v1");
+        c.RoutePrefix = string.Empty;  // Swagger UI en la raíz (http://localhost:5000)
+    });
 }
 
-app.UseCors("AllowAll");
-app.UseHttpsRedirection();
+// Configuración para servir el archivo index.html (si tienes archivos estáticos)
+app.MapFallbackToFile("index.html");
+
+app.UseCors(policy => policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
 app.UseAuthentication();
 app.UseAuthorization();
+
 app.MapControllers();
+app.MapGet("/", () => "Hello World!");
+
+// Iniciar la aplicación
 app.Run();
